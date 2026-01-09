@@ -107,6 +107,12 @@ class Vehicle(Robot):
         # Variable that will hold the current state of the vehicle
         self._state = State()
 
+        # --------------------------------------------------------------------
+        # Add a callback to sync ROS2 clock FIRST (before any other callbacks)
+        # This ensures all subsequent callbacks have access to the correct sim time
+        # --------------------------------------------------------------------
+        self._world.add_physics_callback(self._stage_prefix + "/0_clock_sync", self.sync_backend_clocks)
+
         # Add a callback to the physics engine to update the current state of the system
         self._world.add_physics_callback(self._stage_prefix + "/state", self.update_state)
 
@@ -404,6 +410,18 @@ class Vehicle(Robot):
         """
         for backend in self._backends:
             backend.update_state(self._state)
+
+    def sync_backend_clocks(self, dt: float):
+        """
+        Callback that syncs the ROS2 clock for all backends BEFORE any other callbacks.
+        This ensures that get_clock().now() returns the correct simulation time.
+
+        Args:
+            dt (float): The time elapsed between the previous and current function calls (s).
+        """
+        for backend in self._backends:
+            if hasattr(backend, 'sync_clock'):
+                backend.sync_clock()
 
     def get_dc_interface(self):
 

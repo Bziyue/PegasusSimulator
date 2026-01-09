@@ -122,9 +122,6 @@ class ROS2Backend(Backend):
         
         # Setup zero input reference for the thrusters
         self.input_ref = [0.0 for i in range(self._num_rotors)]
-        
-        # Flag to track if clock has been synced this physics step
-        self._clock_synced_this_step = False
 
     def initialize(self, vehicle):
         super().initialize(vehicle)
@@ -268,9 +265,6 @@ class ROS2Backend(Backend):
         Method that when implemented, should handle the receivel of the state of the vehicle using this callback
         """
 
-        # 确保在发布数据前时钟已同步（每个物理步只同步一次）
-        self._sync_clock_if_needed()
-
         # Update the dynamic tf broadcaster with the current position of the vehicle in the inertial frame
         if self._pub_tf:
             t = TransformStamped()
@@ -360,9 +354,6 @@ class ROS2Backend(Backend):
         # Only process sensor data if the flag is set to True
         if not self._pub_sensors:
             return
-
-        # 确保在发布数据前时钟已同步（每个物理步只同步一次）
-        self._sync_clock_if_needed()
 
         if sensor_type == "IMU":
             self.update_imu_data(data)
@@ -597,14 +588,21 @@ class ROS2Backend(Backend):
         """
         return self.input_ref
 
-    def _sync_clock_if_needed(self):
+    def sync_clock(self):
         """
-        Sync the ROS2 node clock with simulation time (only once per physics step)
+        Sync the ROS2 node clock with simulation time.
+        Called by vehicle.sync_backend_clocks() at the START of each physics step,
+        before any other callbacks that need timestamps.
+        
+        For multi-vehicle setups:
+        - Only ONE ROS2Backend publishes /clock (the one with clock_pub != None)
+        - ALL ROS2Backends with use_sim_time must call spin_once() to receive the clock update
         """
-        if self._clock_synced_this_step:
+        if not self._use_sim_time:
             return
             
-        if self._use_sim_time and self.clock_pub is not None and self.vehicle is not None:
+        # Only the backend that owns the clock publisher publishes the time
+        if self.clock_pub is not None and self.vehicle is not None:
             sim_time = self.vehicle._world.current_time
             sec = int(sim_time)
             nanosec = int((sim_time - sec) * 1e9)
@@ -612,20 +610,15 @@ class ROS2Backend(Backend):
             clock_msg = Clock()
             clock_msg.clock = Time(seconds=sec, nanoseconds=nanosec, clock_type=ClockType.ROS_TIME).to_msg()
             self.clock_pub.publish(clock_msg)
-            
-            rclpy.spin_once(self.node, timeout_sec=0)
-            
-            self._clock_synced_this_step = True
+        
+        # ALL backends with use_sim_time need to spin to receive the clock update
+        rclpy.spin_once(self.node, timeout_sec=0)
 
     def update(self, dt: float):
         """
         Method that when implemented, should be used to update the state of the backend and the information being sent/received
         from the communication interface. This method will be called by the simulation on every physics step
         """
-
-        # Reset the clock sync flag for the next physics step
-        self._clock_synced_this_step = False
-
         # Poll for new ROS 2 messages in a non-blocking way
         rclpy.spin_once(self.node, timeout_sec=0)
 
