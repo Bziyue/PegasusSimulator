@@ -204,7 +204,7 @@ class ROS2Backend(Backend):
         l = []
         # Create the transformation from base_link FLU (ROS standard) to base_link FRD (standard in airborn and marine vehicles)
         t = TransformStamped()
-        t.header.stamp = self.node.get_clock().now().to_msg()
+        t.header.stamp = self._get_now().to_msg()
         t.header.frame_id = self._namespace + '_' + 'base_link'
         t.child_frame_id = self._namespace + '_' + 'base_link_frd'
 
@@ -222,7 +222,7 @@ class ROS2Backend(Backend):
 
         # Create the transform from map, i.e inertial frame (ROS standard) to map_ned (standard in airborn or marine vehicles)
         t = TransformStamped()
-        t.header.stamp = self.node.get_clock().now().to_msg()
+        t.header.stamp = self._get_now().to_msg()
         t.header.frame_id = "map"
         t.child_frame_id = "map_ned"
         
@@ -244,7 +244,7 @@ class ROS2Backend(Backend):
             gs_orientation = graphical_sensor.orientation
 
             t = TransformStamped()
-            t.header.stamp = self.node.get_clock().now().to_msg()
+            t.header.stamp = self._get_now().to_msg()
             t.header.frame_id = self._namespace + '_' + 'base_link'
             t.child_frame_id = self._namespace + '_' + graphical_sensor.name
 
@@ -268,7 +268,7 @@ class ROS2Backend(Backend):
         # Update the dynamic tf broadcaster with the current position of the vehicle in the inertial frame
         if self._pub_tf:
             t = TransformStamped()
-            t.header.stamp = self.node.get_clock().now().to_msg()
+            t.header.stamp = self._get_now().to_msg()
             t.header.frame_id = "map"
             t.child_frame_id = self._namespace + '_' + 'base_link'
             t.transform.translation.x = state.position[0]
@@ -290,7 +290,7 @@ class ROS2Backend(Backend):
         accel = AccelStamped()
 
         # Update the header
-        pose.header.stamp = self.node.get_clock().now().to_msg()
+        pose.header.stamp = self._get_now().to_msg()
         twist.header.stamp = pose.header.stamp
         twist_inertial.header.stamp = pose.header.stamp
         accel.header.stamp = pose.header.stamp
@@ -342,6 +342,20 @@ class ROS2Backend(Backend):
             rotor_speeds_msg.data = list(rotor_speeds)
             self.rotor_speeds_pub.publish(rotor_speeds_msg)
 
+    def _get_now(self):
+        """
+        Helper method to get the current time.
+        If using simulation time, constructs time directly from the physics engine to avoid 
+        round-trip delays/race conditions with the /clock topic.
+        """
+        if self._use_sim_time and hasattr(self, 'vehicle') and self.vehicle is not None:
+            sim_time = self.vehicle._world.current_time
+            sec = int(sim_time)
+            nanosec = int((sim_time - sec) * 1e9)
+            return Time(seconds=sec, nanoseconds=nanosec, clock_type=ClockType.ROS_TIME)
+        
+        return self.node.get_clock().now()
+    
     def rotor_callback(self, ros_msg: Float64, rotor_id):
         # Update the reference for the rotor of the vehicle
         self.input_ref[rotor_id] = float(ros_msg.data)
@@ -385,7 +399,7 @@ class ROS2Backend(Backend):
         msg = Imu()
 
         # Update the header
-        msg.header.stamp = self.node.get_clock().now().to_msg()
+        msg.header.stamp = self._get_now().to_msg()
         msg.header.frame_id = self._namespace + '_' + "base_link_frd"
         
         # Update the angular velocity (NED + FRD)
@@ -407,7 +421,7 @@ class ROS2Backend(Backend):
         msg_vel = TwistStamped()
 
         # Update the headers
-        msg.header.stamp = self.node.get_clock().now().to_msg()
+        msg.header.stamp = self._get_now().to_msg()
         msg.header.frame_id = "map_ned"
         msg_vel.header.stamp = msg.header.stamp
         msg_vel.header.frame_id = msg.header.frame_id
@@ -437,7 +451,7 @@ class ROS2Backend(Backend):
         msg = MagneticField()
 
         # Update the headers
-        msg.header.stamp = self.node.get_clock().now().to_msg()
+        msg.header.stamp = self._get_now().to_msg()
         msg.header.frame_id = self._namespace + "_" + "base_link_frd"
 
         msg.magnetic_field.x = data["magnetic_field"][0]
