@@ -15,6 +15,7 @@ import rclpy
 from rclpy.time import Time
 from rclpy.clock import ClockType
 from rclpy.parameter import Parameter
+from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy
 from std_msgs.msg import Float64, Float64MultiArray
 from rosgraph_msgs.msg import Clock
 from geometry_msgs.msg import TransformStamped
@@ -166,7 +167,13 @@ class ROS2Backend(Backend):
         # -----------------------------------------------------
         if self._pub_sensors:
             if config.get("pub_imu", True):
-                self.imu_pub = self.node.create_publisher(Imu, self._namespace + "/" + config.get("imu_topic", "sensors/imu"), rclpy.qos.qos_profile_sensor_data)
+                # Use Reliable QoS for IMU data
+                imu_qos = QoSProfile(
+                    reliability=ReliabilityPolicy.RELIABLE,
+                    history=HistoryPolicy.KEEP_LAST,
+                    depth=10
+                )
+                self.imu_pub = self.node.create_publisher(Imu, self._namespace + "/" + config.get("imu_topic", "sensors/imu"), imu_qos)
             
             if config.get("pub_mag", True):
                 self.mag_pub = self.node.create_publisher(MagneticField, self._namespace + "/" + config.get("mag_topic", "sensors/mag"), rclpy.qos.qos_profile_sensor_data)
@@ -400,17 +407,17 @@ class ROS2Backend(Backend):
 
         # Update the header
         msg.header.stamp = self._get_now().to_msg()
-        msg.header.frame_id = self._namespace + '_' + "base_link_frd"
+        msg.header.frame_id = self._namespace + '_' + "base_link"
         
-        # Update the angular velocity (NED + FRD)
+        # Update the angular velocity (FLU)
         msg.angular_velocity.x = data["angular_velocity"][0]
-        msg.angular_velocity.y = data["angular_velocity"][1]
-        msg.angular_velocity.z = data["angular_velocity"][2]
+        msg.angular_velocity.y = -data["angular_velocity"][1]
+        msg.angular_velocity.z = -data["angular_velocity"][2]
         
-        # Update the linear acceleration (NED)
+        # Update the linear acceleration (FLU)
         msg.linear_acceleration.x = data["linear_acceleration"][0]
-        msg.linear_acceleration.y = data["linear_acceleration"][1]
-        msg.linear_acceleration.z = data["linear_acceleration"][2]
+        msg.linear_acceleration.y = -data["linear_acceleration"][1]
+        msg.linear_acceleration.z = -data["linear_acceleration"][2]
 
         # Publish the message with the current imu state
         self.imu_pub.publish(msg)
