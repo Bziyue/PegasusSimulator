@@ -44,6 +44,9 @@ class IMU(Sensor):
         # Initialize the Super class "object" attributes
         super().__init__(sensor_type="IMU", update_rate=config.get("update_rate", 250.0))
 
+        # Enable/disable noise in IMU measurements (default: True)
+        self._enable_noise: bool = config.get("enable_noise", True)
+
         # Orientation noise constant
         self._orientation_noise: float = 0.0
 
@@ -125,9 +128,12 @@ class IMU(Sensor):
         # Simulate gyroscope noise processes and add them to the true angular rate.
         angular_velocity: np.ndarray = np.zeros((3,))
 
-        for i in range(3):
-            self._gyroscope_bias[i] = phi_g_d * self._gyroscope_bias[i] + sigma_b_g_d * np.random.randn()
-            angular_velocity[i] = state.angular_velocity[i] + sigma_g_d * np.random.randn() + self._gyroscope_bias[i]
+        if self._enable_noise:
+            for i in range(3):
+                self._gyroscope_bias[i] = phi_g_d * self._gyroscope_bias[i] + sigma_b_g_d * np.random.randn()
+                angular_velocity[i] = state.angular_velocity[i] + sigma_g_d * np.random.randn() + self._gyroscope_bias[i]
+        else:
+            angular_velocity = state.angular_velocity.copy()
 
         # Accelerometer terms
         tau_a: float = self._accelerometer_bias_correlation_time
@@ -153,11 +159,13 @@ class IMU(Sensor):
         linear_acceleration = np.array(Rotation.from_quat(state.attitude).inv().apply(linear_acceleration_inertial))
 
         # Simulate the accelerometer noise processes and add them to the true linear aceleration values
-        for i in range(3):
-            self._accelerometer_bias[i] = phi_a_d * self._accelerometer_bias[i] + sigma_b_a_d * np.random.randn()
-            linear_acceleration[i] = (
-                linear_acceleration[i] + sigma_a_d * np.random.randn() + self._accelerometer_bias[i]
-            )
+        if self._enable_noise:
+            for i in range(3):
+                self._accelerometer_bias[i] = phi_a_d * self._accelerometer_bias[i] + sigma_b_a_d * np.random.randn()
+                linear_acceleration[i] = (
+                    linear_acceleration[i] + sigma_a_d * np.random.randn() + self._accelerometer_bias[i]
+                )
+        # If noise is disabled, linear_acceleration already contains the true values without noise
 
         # TODO - Add small "noisy" to the attitude
 
