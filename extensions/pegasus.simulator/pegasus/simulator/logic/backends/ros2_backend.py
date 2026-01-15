@@ -378,6 +378,8 @@ class ROS2Backend(Backend):
 
         if sensor_type == "IMU":
             self.update_imu_data(data)
+        elif sensor_type == "IsaacIMU":
+            self.update_isaac_imu_data(data)
         elif sensor_type == "GPS":
             self.update_gps_data(data)
         elif sensor_type == "Magnetometer":
@@ -546,6 +548,55 @@ class ROS2Backend(Backend):
             omni.syntheticdata.SyntheticData.Get().set_node_attributes(
                 "IsaacReadSimulationTime", {"inputs:resetOnStop": True}, render_prod_path
             )
+
+    def update_isaac_imu_data(self, data):
+        """
+        Update and publish Isaac Sim native IMU sensor data
+        """
+        imu_name = data.get("imu_name", "isaac_imu")
+        
+        # Create publisher if not exists
+        if not hasattr(self, 'isaac_imu_pub'):
+            # Use Reliable QoS for IMU data
+            imu_qos = QoSProfile(
+                reliability=ReliabilityPolicy.RELIABLE,
+                history=HistoryPolicy.KEEP_LAST,
+                depth=10
+            )
+            self.isaac_imu_pub = self.node.create_publisher(
+                Imu, 
+                self._namespace + "/sensors/isaac_imu", 
+                imu_qos
+            )
+            carb.log_info(f"Created Isaac IMU publisher: {self._namespace}/sensors/isaac_imu")
+        
+        msg = Imu()
+        
+        # Update the header
+        msg.header.stamp = self._get_now().to_msg()
+        msg.header.frame_id = self._namespace + '_' + "base_link"
+        
+        # Update the orientation (quaternion)
+        orientation = data.get("orientation", [0, 0, 0, 1])
+        msg.orientation.x = orientation[0]
+        msg.orientation.y = orientation[1]
+        msg.orientation.z = orientation[2]
+        msg.orientation.w = orientation[3]
+        
+        # Update the angular velocity (rad/s) - already in body frame
+        angular_velocity = data.get("angular_velocity", [0, 0, 0])
+        msg.angular_velocity.x = angular_velocity[0]
+        msg.angular_velocity.y = angular_velocity[1]
+        msg.angular_velocity.z = angular_velocity[2]
+        
+        # Update the linear acceleration (m/s^2) - already in body frame with gravity
+        linear_acceleration = data.get("linear_acceleration", [0, 0, 0])
+        msg.linear_acceleration.x = linear_acceleration[0]
+        msg.linear_acceleration.y = linear_acceleration[1]
+        msg.linear_acceleration.z = linear_acceleration[2]
+        
+        # Publish the message
+        self.isaac_imu_pub.publish(msg)
 
     def update_lidar_data(self, data):
 

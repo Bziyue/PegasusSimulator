@@ -18,7 +18,7 @@ from pegasus.simulator.logic.backends.px4_mavlink_backend import PX4MavlinkBacke
 # Sensors and dynamics setup
 from pegasus.simulator.logic.dynamics import LinearDrag
 from pegasus.simulator.logic.thrusters import QuadraticThrustCurve
-from pegasus.simulator.logic.sensors import Barometer, IMU, Magnetometer, GPS
+from pegasus.simulator.logic.sensors import Barometer, IMU, Magnetometer, GPS, IsaacIMU
 
 class MultirotorConfig:
     """
@@ -41,7 +41,7 @@ class MultirotorConfig:
         self.drag = LinearDrag([0.50, 0.30, 0.0])
 
         # The default sensors for a quadrotor
-        self.sensors = [Barometer(), IMU(), Magnetometer(), GPS()]
+        self.sensors = [Barometer(), IMU(), Magnetometer(), GPS(), IsaacIMU("isaac_imu")]
 
         # The default graphical sensors for a quadrotor
         self.graphical_sensors = []
